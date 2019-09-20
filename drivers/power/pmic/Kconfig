@@ -31,6 +31,13 @@ config SPL_PMIC_CHILDREN
 	to call your regulator code (e.g. see rk8xx.c for direct functions
 	for use in SPL).
 
+config PMIC_AB8500
+	bool "Enable driver for ST-Ericsson AB8500 PMIC"
+	depends on DM_PMIC && SYSCON
+	help
+	  Enable support for ST-Ericsson AB8500 Mixed Signal Power Management
+	  chip. Connects to U8500 with I2C bus via PRCMU.
+
 config PMIC_ACT8846
 	bool "Enable support for the active-semi 8846 PMIC"
 	depends on DM_PMIC && DM_I2C
