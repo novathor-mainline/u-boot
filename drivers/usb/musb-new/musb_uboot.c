@@ -425,6 +425,17 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 }
 #endif /* CONFIG_USB_MUSB_GADGET */
 
+#if defined(CONFIG_USB_MUSB_GADGET) && CONFIG_IS_ENABLED(DM_USB_GADGET)
+int dm_usb_gadget_handle_interrupts(struct udevice *dev)
+{
+	struct musb_host_data *host = dev_get_priv(dev);
+
+	host->host->isr(0, host->host);
+
+	return 0;
+}
+#endif /* CONFIG_USB_MUSB_GADGET */
+
 struct musb *musb_register(struct musb_hdrc_platform_data *plat, void *bdata,
 			   void *ctl_regs)
 {
