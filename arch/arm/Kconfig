@@ -1068,10 +1068,15 @@ config ARCH_U8500
 	select OF_CONTROL
 	select SYSRESET
 	select TIMER
+	imply AB8500_USB_PHY
 	imply ARM_PL180_MMCI
+	imply DM_PMIC
 	imply DM_RTC
+	imply NOMADIK_GPIO
 	imply NOMADIK_MTU_TIMER
 	imply PL01X_SERIAL
+	imply PHY
+	imply PMIC_AB8500
 	imply RTC_PL031
 	imply SYSRESET_SYSCON
 
