@@ -1933,24 +1933,30 @@ int __devinit musb_gadget_setup(struct musb *musb)
 		put_device(&musb->g.dev);
 		return status;
 	}
+#endif
+#if CONFIG_IS_ENABLED(DM_USB_GADGET)
 	status = usb_add_gadget_udc(musb->controller, &musb->g);
 	if (status)
 		goto err;
 #endif
 
 	return 0;
-#ifndef __UBOOT__
+#if CONFIG_IS_ENABLED(DM_USB_GADGET)
 err:
+#ifndef __UBOOT__
 	musb->g.dev.parent = NULL;
 	device_unregister(&musb->g.dev);
+#endif
 	return status;
 #endif
 }
 
 void musb_gadget_cleanup(struct musb *musb)
 {
-#ifndef __UBOOT__
+#if CONFIG_IS_ENABLED(DM_USB_GADGET)
 	usb_del_gadget_udc(&musb->g);
+#endif
+#ifndef __UBOOT__
 	if (musb->g.dev.parent)
 		device_unregister(&musb->g.dev);
 #endif
