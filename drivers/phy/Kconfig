@@ -59,6 +59,12 @@ config SPL_NOP_PHY
 	  This is useful when a driver uses the PHY framework but no real PHY
 	  hardware exists.
 
+config AB8500_USB_PHY
+	bool "AB8500 USB PHY Driver"
+	depends on PHY && PMIC_AB8500
+	help
+	  Support for the USB OTG PHY in ST-Ericsson AB8500.
+
 config BCM6318_USBH_PHY
 	bool "BCM6318 USBH PHY support"
 	depends on PHY && ARCH_BMIPS
