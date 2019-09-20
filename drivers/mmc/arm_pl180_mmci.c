@@ -423,11 +423,11 @@ static int arm_pl180_mmc_probe(struct udevice *dev)
 	struct mmc *mmc = &pdata->mmc;
 	struct pl180_mmc_host *host = dev->priv;
 	struct mmc_config *cfg = &pdata->cfg;
-	struct clk clk;
-	u32 bus_width;
+	//struct clk clk;
 	u32 periphid;
 	int ret;
 
+	/*
 	ret = clk_get_by_index(dev, 0, &clk);
 	if (ret < 0)
 		return ret;
@@ -438,11 +438,13 @@ static int arm_pl180_mmc_probe(struct udevice *dev)
 		dev_err(dev, "failed to enable clock\n");
 		return ret;
 	}
+	*/
 
-	host->pwr_init = INIT_PWR;
-	host->clkdiv_init = SDI_CLKCR_CLKDIV_INIT_V1 | SDI_CLKCR_CLKEN |
+	host->pwr_init = SDI_PWR_OPD | SDI_PWR_PWRCTRL_ON;
+	host->clkdiv_init = SDI_CLKCR_CLKDIV_INIT_V2 | SDI_CLKCR_CLKEN |
 			    SDI_CLKCR_HWFC_EN;
-	host->clock_in = clk_get_rate(&clk);
+	//host->clock_in = clk_get_rate(&clk);
+	host->clock_in = ARM_MCLK;
 
 	periphid = dev_read_u32_default(dev, "arm,primecell-periphid", 0);
 	switch (periphid) {
@@ -454,27 +456,17 @@ static int arm_pl180_mmc_probe(struct udevice *dev)
 	}
 
 	cfg->name = dev->name;
-	cfg->voltages = VOLTAGE_WINDOW_SD;
+	cfg->voltages = VOLTAGE_WINDOW_MMC;
 	cfg->host_caps = 0;
-	cfg->f_min = host->clock_in / (2 * (SDI_CLKCR_CLKDIV_INIT_V1 + 1));
-	cfg->f_max = dev_read_u32_default(dev, "max-frequency", MMC_CLOCK_MAX);
+	//cfg->f_min = host->clock_in / (2 * (SDI_CLKCR_CLKDIV_INIT_V1 + 1));
+	cfg->f_min = host->clock_in / (2 + SDI_CLKCR_CLKDIV_INIT_V2);
 	cfg->b_max = CONFIG_SYS_MMC_MAX_BLK_COUNT;
 
 	gpio_request_by_name(dev, "cd-gpios", 0, &host->cd_gpio, GPIOD_IS_IN);
 
-	bus_width = dev_read_u32_default(dev, "bus-width", 1);
-	switch (bus_width) {
-	case 8:
-		cfg->host_caps |= MMC_MODE_8BIT;
-		/* Hosts capable of 8-bit transfers can also do 4 bits */
-	case 4:
-		cfg->host_caps |= MMC_MODE_4BIT;
-		break;
-	case 1:
-		break;
-	default:
-		dev_err(dev, "Invalid bus-width value %u\n", bus_width);
-	}
+	ret = mmc_of_parse(dev, cfg);
+	if (ret)
+		return ret;
 
 	arm_pl180_mmc_init(host);
 	mmc->priv = host;
