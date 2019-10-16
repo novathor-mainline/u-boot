@@ -25,6 +25,13 @@
 #define MCDE_OVL0CONF_PPL_MASK			0x000007FF
 #define MCDE_OVL0CONF_LPF_SHIFT			16
 #define MCDE_OVL0CONF_LPF_MASK			0x07FF0000
+#define MCDE_CHNL0SYNCHMOD			0x00000608
+#define MCDE_CHNL0SYNCHMOD_SRC_SYNCH_SHIFT	0
+#define MCDE_CHNL0SYNCHMOD_SRC_SYNCH_MASK	0x00000003
+#define MCDE_CHNL0SYNCHSW			0x0000060C
+#define MCDE_CHNL0SYNCHSW_SW_TRIG		1
+#define MCDE_CRA0				0x00000800
+#define MCDE_CRA0_FLOEN				1
 
 enum mcde_bpp {
 	MCDE_EXTSRC0CONF_BPP_1BPP_PAL,
@@ -41,28 +48,39 @@ enum mcde_bpp {
 	MCDE_EXTSRC0CONF_BPP_YCBCR422
 };
 
+enum mcde_src_synch {
+	MCDE_CHNL0SYNCHMOD_SRC_SYNCH_HARDWARE,
+	MCDE_CHNL0SYNCHMOD_SRC_SYNCH_NO_SYNCH,
+	MCDE_CHNL0SYNCHMOD_SRC_SYNCH_SOFTWARE
+};
+
+struct mcde_simple_priv {
+	fdt_addr_t base;
+	enum mcde_src_synch src_synch;
+};
+
 static int mcde_simple_probe(struct udevice *dev)
 {
+	struct mcde_simple_priv *priv = dev_get_priv(dev);
 	struct video_uc_platdata *plat = dev_get_uclass_platdata(dev);
 	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
 	enum mcde_bpp bpp;
-	fdt_addr_t base;
 	unsigned int val;
 
-	base = dev_read_addr(dev);
-	if (base == FDT_ADDR_T_NONE)
+	priv->base = dev_read_addr(dev);
+	if (priv->base == FDT_ADDR_T_NONE)
 		return -EINVAL;
 
-	plat->base = readl(base + MCDE_EXTSRC0A0);
+	plat->base = readl(priv->base + MCDE_EXTSRC0A0);
 	if (!plat->base)
 		return -ENODEV;
 
-	val = readl(base + MCDE_OVL0CONF);
+	val = readl(priv->base + MCDE_OVL0CONF);
 	uc_priv->xsize = MCDE_REG2VAL(MCDE_OVL0CONF, PPL, val);
 	uc_priv->ysize = MCDE_REG2VAL(MCDE_OVL0CONF, LPF, val);
 	uc_priv->rot = 0;
 
-	val = readl(base + MCDE_EXTSRC0CONF);
+	val = readl(priv->base + MCDE_EXTSRC0CONF);
 	bpp = (enum mcde_bpp)MCDE_REG2VAL(MCDE_EXTSRC0CONF, BPP, val);
 	switch (bpp) {
 	case MCDE_EXTSRC0CONF_BPP_RGB565:
@@ -77,6 +95,10 @@ static int mcde_simple_probe(struct udevice *dev)
 		return -EINVAL;
 	}
 
+	val = readl(priv->base + MCDE_CHNL0SYNCHMOD);
+	priv->src_synch = (enum mcde_src_synch) MCDE_REG2VAL(MCDE_CHNL0SYNCHMOD,
+							     SRC_SYNCH, val);
+
 	plat->size = uc_priv->xsize * uc_priv->ysize * VNBYTES(uc_priv->bpix);
 	debug("MCDE base: 0x%lx, xsize: %d, ysize: %d, bpp: %d\n",
 	      plat->base, uc_priv->xsize, uc_priv->ysize, VNBITS(uc_priv->bpix));
@@ -84,6 +106,35 @@ static int mcde_simple_probe(struct udevice *dev)
 	video_set_flush_dcache(dev, true);
 	return 0;
 }
+
+void mcde_simple_sync(struct udevice *dev, bool force)
+{
+	struct mcde_simple_priv *priv = dev_get_priv(dev);
+	unsigned int val;
+
+	if (priv->src_synch != MCDE_CHNL0SYNCHMOD_SRC_SYNCH_SOFTWARE)
+		return;
+
+	/* Enable flow */
+	val = readl(priv->base + MCDE_CRA0);
+	val |= MCDE_CRA0_FLOEN;
+	writel(val, priv->base + MCDE_CRA0);
+
+	/* Trigger a software sync */
+	writel(MCDE_CHNL0SYNCHSW_SW_TRIG, priv->base + MCDE_CHNL0SYNCHSW);
+
+	/* Disable flow */
+	val = readl(priv->base + MCDE_CRA0);
+	val &= ~MCDE_CRA0_FLOEN;
+	writel(val, priv->base + MCDE_CRA0);
+
+	/* Wait for completion */
+	while (readl(priv->base + MCDE_CRA0) & MCDE_CRA0_FLOEN) {}
+}
+
+static struct video_ops mcde_simple_ops = {
+	.sync = mcde_simple_sync,
+};
 
 static const struct udevice_id mcde_simple_ids[] = {
 	{ .compatible = "ste,mcde" },
@@ -93,6 +144,8 @@ static const struct udevice_id mcde_simple_ids[] = {
 U_BOOT_DRIVER(mcde_simple) = {
 	.name	= "mcde_simple",
 	.id	= UCLASS_VIDEO,
+	.ops	= &mcde_simple_ops,
 	.of_match = mcde_simple_ids,
 	.probe	= mcde_simple_probe,
+	.priv_auto_alloc_size = sizeof(struct mcde_simple_priv),
 };
