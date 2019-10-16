@@ -174,6 +174,8 @@ void video_set_default_colors(struct udevice *dev, bool invert)
 /* Flush video activity to the caches */
 void video_sync(struct udevice *vid, bool force)
 {
+	struct video_ops *ops = video_get_ops(vid);
+
 	/*
 	 * flush_dcache_range() is declared in common.h but it seems that some
 	 * architectures do not actually implement it. Is there a way to find
@@ -196,6 +198,9 @@ void video_sync(struct udevice *vid, bool force)
 		last_sync = get_timer(0);
 	}
 #endif
+
+	if (ops && ops->sync)
+		ops->sync(vid, force);
 }
 
 void video_sync_all(void)

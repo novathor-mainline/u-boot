@@ -116,8 +116,20 @@ struct video_priv {
 	u8 bg_col_idx;
 };
 
-/* Placeholder - there are no video operations at present */
+/* struct video_ops - Video operations */
 struct video_ops {
+	/**
+	 * sync() - Sync a device's frame buffer with its hardware
+	 *
+	 * Some frame buffers are cached or have a secondary frame buffer. This
+	 * function syncs these up so that the current contents of the U-Boot frame
+	 * buffer are displayed to the user.
+	 *
+	 * @dev:	Device to sync
+	 * @force:	True to force a sync even if there was one recently (this is
+	 *		very expensive on sandbox)
+	 */
+	void (*sync)(struct udevice *vid, bool force);
 };
 
 #define video_get_ops(dev)        ((struct video_ops *)(dev)->driver->ops)
