@@ -47,6 +47,22 @@ static int part_get_info_by_name_or_alias(struct blk_desc *dev_desc,
 			ret = part_get_info_by_name(dev_desc,
 					aliased_part_name, info);
 	}
+
+	if (ret > 0) {
+		/* strlen("fastboot_partition_offset_") + PART_NAME_LEN + 1 */
+		char env_offset_name[26 + PART_NAME_LEN + 1];
+		ulong offset;
+
+		/* check for offset */
+		strcpy(env_offset_name, "fastboot_partition_offset_");
+		strncat(env_offset_name, name, PART_NAME_LEN);
+		offset = env_get_hex(env_offset_name, 0);
+		if (offset) {
+			info->start += offset;
+			info->size -= offset;
+		}
+	}
+
 	return ret;
 }
 
