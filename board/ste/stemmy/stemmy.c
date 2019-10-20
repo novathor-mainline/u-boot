@@ -7,6 +7,7 @@
 #include <init.h>
 #include <log.h>
 #include <stdlib.h>
+#include <asm/gpio.h>
 #include <asm/setup.h>
 #include <asm/system.h>
 
@@ -83,6 +84,67 @@ int board_init(void)
 	return 0;
 }
 
+struct gpio_keys {
+	struct gpio_desc vol_up;
+	struct gpio_desc vol_down;
+};
+
+static void request_gpio_key(int node, const char *name, struct gpio_desc *desc)
+{
+	int ret;
+
+	if (node < 0)
+		return;
+
+	ret = gpio_request_by_name_nodev(offset_to_ofnode(node), "gpios", 0,
+					 desc, GPIOD_IS_IN);
+	if (ret)
+		log_err("Failed to request %s GPIO: %d\n", name, ret);
+}
+
+static void request_gpio_keys(const void *fdt, struct gpio_keys *keys)
+{
+	int offset;
+	int vol_up_node = -FDT_ERR_NOTFOUND;
+	int vol_down_node = -FDT_ERR_NOTFOUND;
+
+	/* Look for volume-up and volume-down subnodes of gpio-keys */
+	offset = fdt_node_offset_by_compatible(fdt, -1, "gpio-keys");
+	while (offset != -FDT_ERR_NOTFOUND) {
+		if (vol_up_node < 0)
+			vol_up_node = fdt_subnode_offset(fdt, offset, "volume-up");
+		if (vol_down_node < 0)
+			vol_down_node = fdt_subnode_offset(fdt, offset, "volume-down");
+
+		if (vol_up_node >= 0 && vol_down_node >= 0)
+			break;
+
+		offset = fdt_node_offset_by_compatible(fdt, offset, "gpio-keys");
+	}
+
+	request_gpio_key(vol_up_node, "volume-up", &keys->vol_up);
+	request_gpio_key(vol_down_node, "volume-down", &keys->vol_down);
+}
+
+static void check_keys(const void *fdt)
+{
+	struct gpio_keys keys = {0};
+
+	if (!fdt)
+		return;
+
+	/* Request gpio-keys from device tree */
+	request_gpio_keys(fdt, &keys);
+
+	/* Boot into recovery? */
+	if (dm_gpio_get_value(&keys.vol_up) == 1)
+		env_set("bootcmd", "run recoverybootcmd");
+
+	/* Boot into fastboot? */
+	if (dm_gpio_get_value(&keys.vol_down) == 1)
+		env_set("preboot", "setenv preboot; run fastbootcmd");
+}
+
 static void parse_serial(const struct tag_serialnr *serialnr)
 {
 	char serial[17];
@@ -149,6 +211,7 @@ static void copy_atags(const struct tag *tags)
 int misc_init_r(void)
 {
 	copy_atags(fw_atags_get());
+	check_keys(gd->fdt_blob);
 	return 0;
 }
 
