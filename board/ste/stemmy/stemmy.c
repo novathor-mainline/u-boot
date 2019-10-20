@@ -3,8 +3,10 @@
  * Copyright (C) 2019 Stephan Gerhold <stephan@gerhold.net>
  */
 #include <common.h>
+#include <env.h>
 #include <init.h>
 #include <log.h>
+#include <stdlib.h>
 #include <asm/setup.h>
 #include <asm/system.h>
 
@@ -13,6 +15,9 @@ DECLARE_GLOBAL_DATA_PTR;
 /* Parse atags provided by Samsung bootloader to get available memory. */
 static ulong fw_mach __section(".data");
 static ulong fw_atags __section(".data");
+
+static const struct tag *fw_atags_copy = NULL;
+static uint fw_atags_size = 0;
 
 void save_boot_params(ulong r0, ulong r1, ulong r2, ulong r3)
 {
@@ -76,4 +81,84 @@ int board_init(void)
 	gd->bd->bi_arch_number = fw_mach;
 	gd->bd->bi_boot_params = fw_atags;
 	return 0;
+}
+
+static void parse_serial(const struct tag_serialnr *serialnr)
+{
+	char serial[17];
+
+	if (env_get("serial#"))
+		return;
+
+	sprintf(serial, "%08x%08x", serialnr->high, serialnr->low);
+	env_set("serial#", serial);
+}
+
+/*
+ * The downstream/vendor kernel (provided by Samsung) uses atags for booting.
+ * It also requires an extremely long cmdline provided by the primary bootloader
+ * that is not suitable for booting mainline.
+ *
+ * Since downstream is the only user of atags, we emulate the behavior of the
+ * Samsung bootloader by generating only the initrd atag in u-boot, and copying
+ * all other atags as-is from the primary bootloader.
+ */
+static inline bool skip_atag(u32 tag)
+{
+	return (tag == ATAG_NONE || tag == ATAG_CORE ||
+		tag == ATAG_INITRD || tag == ATAG_INITRD2);
+}
+
+static void copy_atags(const struct tag *tags)
+{
+	const struct tag *t;
+	struct tag *copy;
+
+	if (!tags)
+		return;
+
+	/* Calculate necessary size for tags we want to copy */
+	for_each_tag(t, tags) {
+		if (skip_atag(t->hdr.tag))
+			continue;
+
+		if (t->hdr.tag == ATAG_SERIAL)
+			parse_serial(&t->u.serialnr);
+
+		fw_atags_size += t->hdr.size << 2;
+	}
+
+	if (!fw_atags_size)
+		return;  /* No tags to copy */
+
+	copy = malloc(fw_atags_size);
+	if (!copy)
+		return;
+	fw_atags_copy = copy;
+
+	/* Copy tags */
+	for_each_tag(t, tags) {
+		if (skip_atag(t->hdr.tag))
+			continue;
+
+		memcpy(copy, t, t->hdr.size << 2);
+		copy = tag_next(copy);
+	}
+}
+
+int misc_init_r(void)
+{
+	copy_atags(fw_atags_get());
+	return 0;
+}
+
+void setup_board_tags(struct tag **in_params)
+{
+	u8 **bytes = (u8**)in_params;
+
+	if (!fw_atags_copy)
+		return;
+
+	memcpy(*bytes, fw_atags_copy, fw_atags_size);
+	*bytes += fw_atags_size;
 }
