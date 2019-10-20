@@ -214,6 +214,12 @@ config MXS_GPIO
 	help
 	  Support GPIO controllers on i.MX23 and i.MX28 platforms
 
+config NOMADIK_GPIO
+	bool "Nomadik GPIO driver"
+	depends on DM_GPIO && ARCH_U8500
+	help
+	  Support Nomadik GPIO controller on ST-Ericsson U8500 platforms.
+
 config OMAP_GPIO
 	bool "TI OMAP GPIO driver"
 	depends on ARCH_OMAP2PLUS
