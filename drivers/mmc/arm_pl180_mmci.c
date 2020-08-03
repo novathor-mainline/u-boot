@@ -539,7 +539,7 @@ static int arm_pl180_mmc_ofdata_to_platdata(struct udevice *dev)
 
 static const struct udevice_id arm_pl180_mmc_match[] = {
 	{ .compatible = "arm,pl180" },
-	{ .compatible = "arm,primecell" },
+	{ .compatible = "arm,pl18x" },
 	{ /* sentinel */ }
 };
 
